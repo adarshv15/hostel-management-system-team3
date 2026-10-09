@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hostel Management System</title>
+  <style>
+    :root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#182230;background:#f4f6fa}
+    body{margin:0}header{background:#14213d;color:#fff;padding:24px 6vw}
+    header h1{margin:0 0 8px;font-size:clamp(24px,4vw,36px)}header p{margin:0;color:#d7deea}
+    main{max-width:1100px;margin:28px auto;padding:0 20px}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 24px}
+    a.btn{background:#2563eb;color:white;padding:11px 16px;border-radius:8px;text-decoration:none;font-weight:600}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}
+    .card{background:#fff;border:1px solid #e0e5ee;border-radius:12px;padding:18px;box-shadow:0 2px 7px #13213a0b}
+    .label{font-size:13px;color:#657084}.value{font-size:30px;font-weight:750;margin-top:8px}
+    h2{margin-top:30px}.notice{border-bottom:1px solid #edf0f5;padding:12px 0}.notice:last-child{border:0}
+    .muted{color:#657084}footer{text-align:center;color:#657084;padding:30px}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Hostel Management System</h1>
+  <p>Team 3 · Student records, room allocation, fees and hostel operations</p>
+</header>
+<main>
+  <p>Welcome to the HMS project dashboard. Use the administration console to manage records and review system data.</p>
+  <div class="actions">
+    <a class="btn" href="/admin/">Open Administration Console</a>
+    <a class="btn" href="/health/">Check Application Health</a>
+  </div>
+  <section class="grid">
+    <div class="card"><div class="label">Student records</div><div class="value">{{ student_count }}</div></div>
+    <div class="card"><div class="label">Rooms</div><div class="value">{{ room_count }}</div></div>
+    <div class="card"><div class="label">Active allocations</div><div class="value">{{ active_allocations }}</div></div>
+    <div class="card"><div class="label">Unpaid / outstanding invoices</div><div class="value">{{ unpaid_invoices }}</div></div>
+    <div class="card"><div class="label">Open complaints</div><div class="value">{{ open_complaints }}</div></div>
+    <div class="card"><div class="label">Pending leave requests</div><div class="value">{{ pending_leave }}</div></div>
+  </section>
+  <h2>Published notices</h2>
+  <section class="card">
+    {% for notice in notices %}
+      <div class="notice"><strong>{{ notice.title }}</strong><p>{{ notice.message }}</p><small class="muted">{{ notice.created_at|date:"d M Y" }}</small></div>
+    {% empty %}
+      <p class="muted">No published notices yet.</p>
+    {% endfor %}
+  </section>
+  <h2>Modules in this starter</h2>
+  <p class="muted">Student registration · Rooms and allocations · Fee invoices and payment records · Complaints · Leave requests · Visitor logs · Meal attendance · Notices · Audit events</p>
+</main>
+<footer>HMS · Software Engineering Mini Project · Team 3</footer>
+</body>
+</html>
