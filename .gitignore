@@ -1,19 +1,6 @@
-# Python cache files
+*.pyc
 __pycache__/
-*.py[cod]
-
-# Django local database
-db.sqlite3
-
-# Virtual environment
-venv/
+*.sqlite3
+.coverage
+htmlcov/
 .venv/
-env/
-
-# Environment variables
-.env
-
-# Editor and operating system files
-.vscode/
-.DS_Store
-Thumbs.db
