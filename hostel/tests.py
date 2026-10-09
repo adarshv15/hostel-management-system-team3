@@ -188,3 +188,103 @@ class HostelModelTests(TestCase):
         self.assertEqual(AuditEvent.objects.filter(object_type="Student").count(), 1)
         self.assertEqual(audit.action, "CREATE")
         self.assertEqual(audit.details["student_id"], "HMS001")
+    
+    # Sharath's contribution: additional business-rule validation tests
+
+    def test_inactive_student_cannot_be_allocated_a_bed(self):
+        inactive_student = Student.objects.create(
+            student_id="HMS003",
+            full_name="Inactive Student",
+            email="inactive@example.com",
+            status="INACTIVE",
+        )
+
+        allocation = Allocation(
+            student=inactive_student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+
+        with self.assertRaises(ValidationError):
+            allocation.full_clean()
+
+    def test_full_room_rejects_another_allocation(self):
+        Allocation.objects.create(
+            student=self.student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+
+        second_student = Student.objects.create(
+            student_id="HMS004",
+            full_name="Second Student",
+            email="second@example.com",
+            status="ACTIVE",
+        )
+
+        allocation = Allocation(
+            student=second_student,
+            room=self.room,
+            bed_label="Bed 2",
+        )
+
+        with self.assertRaises(ValidationError):
+            allocation.full_clean()
+
+    def test_leave_request_for_single_day_is_valid(self):
+        leave = LeaveRequest(
+            student=self.student,
+            start_date=date.today(),
+            end_date=date.today(),
+            reason="One-day personal leave",
+        )
+
+        leave.full_clean()
+    
+    # Additional business-rule tests contributed by Sharath
+
+    def test_inactive_student_cannot_be_allocated_a_bed(self):
+        inactive_student = Student.objects.create(
+            student_id="HMS003",
+            full_name="Inactive Student",
+            email="inactive@example.com",
+            status="INACTIVE",
+        )
+        allocation = Allocation(
+            student=inactive_student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+
+        with self.assertRaises(ValidationError):
+            allocation.full_clean()
+
+    def test_full_room_rejects_another_allocation(self):
+        Allocation.objects.create(
+            student=self.student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+        second_student = Student.objects.create(
+            student_id="HMS004",
+            full_name="Second Student",
+            email="second@example.com",
+            status="ACTIVE",
+        )
+        allocation = Allocation(
+            student=second_student,
+            room=self.room,
+            bed_label="Bed 2",
+        )
+
+        with self.assertRaises(ValidationError):
+            allocation.full_clean()
+
+    def test_leave_request_for_single_day_is_valid(self):
+        leave = LeaveRequest(
+            student=self.student,
+            start_date=date.today(),
+            end_date=date.today(),
+            reason="One-day personal leave",
+        )
+        leave.full_clean()
