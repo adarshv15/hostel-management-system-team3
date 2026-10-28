@@ -1,3 +1,4 @@
+
 from django.contrib import admin
 from django.db.models import Sum, Value, DecimalField
 from django.db.models.functions import Coalesce
@@ -19,8 +20,8 @@ from .models import (
 
 class AuditLoggingAdmin(admin.ModelAdmin):
     """
-    Automatically logs create, update, and delete actions
-    performed through the Django admin panel.
+    Log create, update, individual delete, and bulk delete
+    operations performed through the Django admin panel.
     """
 
     def save_model(self, request, obj, form, change):
@@ -55,6 +56,32 @@ class AuditLoggingAdmin(admin.ModelAdmin):
         )
 
         super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        """
+        Record an audit event for every object removed through
+        Django admin's bulk-delete action.
+        """
+        audit_events = [
+            AuditEvent(
+                actor=request.user,
+                action="DELETE",
+                object_type=obj.__class__.__name__,
+                object_id=str(obj.pk),
+                details={
+                    "message": (
+                        f"{obj.__class__.__name__} "
+                        "deleted through Django admin bulk action."
+                    )
+                },
+            )
+            for obj in queryset
+        ]
+
+        if audit_events:
+            AuditEvent.objects.bulk_create(audit_events)
+
+        queryset.delete()
 
 
 @admin.register(Student)
@@ -115,7 +142,6 @@ class FeeInvoiceAdmin(AuditLoggingAdmin):
         "due_date",
         "status",
     )
-
     list_filter = ("status", "due_date")
     search_fields = (
         "student__full_name",
