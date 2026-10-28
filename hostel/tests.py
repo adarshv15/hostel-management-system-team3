@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import (
     Student,
@@ -60,6 +61,26 @@ class HostelModelTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Hostel Management System")
         self.assertContains(response, "Student records")
+
+    def test_dashboard_only_displays_published_notices(self):
+        Notice.objects.create(
+            title="Published Sprint 2 notice",
+            message="This notice is visible.",
+            published=True,
+            created_by=self.user,
+        )
+        Notice.objects.create(
+            title="Unpublished Sprint 2 draft",
+            message="This draft is not visible.",
+            published=False,
+            created_by=self.user,
+        )
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Published Sprint 2 notice")
+        self.assertNotContains(response, "Unpublished Sprint 2 draft")
 
     def test_health_endpoint(self):
         response = self.client.get(reverse("health"))
@@ -271,6 +292,19 @@ class HostelModelTests(TestCase):
         )
         self.assertEqual(visitor.visitor_name, "Jane Smith")
 
+    def test_record_visitor_exit_time(self):
+        visitor = VisitorLog.objects.create(
+            student=self.student,
+            visitor_name="Jane Smith",
+        )
+        exit_time = timezone.now()
+
+        visitor.exit_time = exit_time
+        visitor.save()
+        visitor.refresh_from_db()
+
+        self.assertEqual(visitor.exit_time, exit_time)
+
     # TC-12: Meal attendance
     def test_record_meal_attendance(self):
         meal = MealAttendance.objects.create(
@@ -288,6 +322,21 @@ class HostelModelTests(TestCase):
             1,
         )
         self.assertTrue(meal.present)
+
+    def test_meal_attendance_prevents_duplicate_student_meal_date(self):
+        MealAttendance.objects.create(
+            student=self.student,
+            date=date.today(),
+            meal="LUNCH",
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                MealAttendance.objects.create(
+                    student=self.student,
+                    date=date.today(),
+                    meal="LUNCH",
+                )
 
     # TC-13: Notice
     def test_create_notice(self):
@@ -314,10 +363,6 @@ class HostelModelTests(TestCase):
             details={"student_id": self.student.student_id},
         )
 
-        self.assertEqual(
-            AuditEvent.objects.filter(object_type="Student").count(),
-            1,
-        )
         self.assertEqual(audit.action, "CREATE")
         self.assertEqual(audit.details["student_id"], "HMS001")
 

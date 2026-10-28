@@ -54,7 +54,12 @@ GitHub Actions runs configuration checks, migrations and tests on pushes and pul
 - Add migration files, tests and requirement-to-test traceability as features evolve.
 
 ## Documentation
-Place the team's approved documents under `docs/`, for example:
+Sprint 2 status and regression coverage are documented in:
+- [Sprint 2 feature and verification summary](docs/SPRINT_2.md)
+- [Automated test case coverage](docs/TEST_CASES.md)
+- [Testing execution report](TESTING_DOCUMENTATION.md)
+
+Place the team's approved source documents under `docs/`, for example:
 - `docs/HMS_SRS.pdf`
 - `docs/HMS_Software_Test_Plan.pdf`
 - `docs/HMS_Software_Architecture_and_Design_Specification.docx`
