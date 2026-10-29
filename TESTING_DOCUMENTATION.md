@@ -13,14 +13,14 @@ python manage.py check
 python manage.py test
 ```
 
-### Results recorded on October 28, 2026
+### Results recorded on October 29, 2026
 
-Executed with the repository's `.venv` interpreter (Python 3.13.7):
+Executed with the local Python 3.12 interpreter:
 
 | Command | Result |
 |---|---|
 | `python manage.py check` | Passed: no issues reported (0 silenced). |
-| `python manage.py test` | Passed: 24 tests in 26.783 seconds. |
+| `python manage.py test` | Passed: 32 tests in 44.846 seconds. |
 
 The test runner creates and destroys its test database. It does not require
 resetting the local development database.
@@ -28,17 +28,15 @@ resetting the local development database.
 ## Automated coverage
 
 See [docs/TEST_CASES.md](docs/TEST_CASES.md) for the requirement-to-test
-mapping. In brief, the automated suite covers fee invoices and payments,
-complaints, leave validation, visitor records, meal attendance uniqueness,
-notices, and administrative audit-event creation, in addition to the earlier
-student, room, allocation, dashboard, health, and configuration regression
-checks. Audit tests cover admin-created student records, updates, and bulk
-deletions; individual deletion and non-admin write paths are not covered.
-
-The fee balance test computes the balance from recorded payments. It does not
-demonstrate payment gateway integration or enforcement that payments cannot
-exceed an invoice. The notice test checks published-versus-unpublished
-visibility, not every notice ordering or limit.
+mapping. In brief, the automated suite covers:
+- Fee invoices and payment records, including validation that payments are strictly positive, do not exceed the remaining balance, and exclude updating payments from the remaining balance sum.
+- Room allocations, including capacity tracking, bed uniqueness, rejection of allocations beyond capacity, rejection of moves into full rooms, and valid in-place updates.
+- Complaints and leave request date ordering.
+- Visitor logs, including exit-after-entry validation and ongoing visit handling.
+- Meal attendance uniqueness per student, meal, and date.
+- Published versus draft notice visibility on the dashboard.
+- Administrative audit event creation for create, update, and bulk deletion.
+- Dashboard, health endpoint, student records, room inventory, and configuration regression checks.
 
 ## Manual checks reported by the project owner
 
@@ -51,8 +49,11 @@ the automated test run in this report.
 
 - Automated tests use Django's test client and temporary database, not a
   deployed environment or real user accounts.
+- Model validations in `clean()` are executed during Django Admin and ModelForm
+  workflows. Direct ORM calls (`objects.create()` or `.save()`) do not call `clean()`
+  automatically without explicit `full_clean()`.
 - Payment records are administrative records; no live payment gateway is
-  connected.
+  connected, and `FeeInvoice.status` is not automatically transitioned upon payment.
 - This report does not claim role-specific student workflows, production
   deployment, or untested SRS acceptance criteria are complete.
 - No code coverage measurement was run for this report.

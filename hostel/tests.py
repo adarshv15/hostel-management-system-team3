@@ -467,3 +467,180 @@ class HostelModelTests(TestCase):
         self.assertFalse(
             Student.objects.filter(pk__in=student_ids).exists()
         )
+    # TC-18: Room capacity hardening
+    def test_new_allocation_exceeding_room_capacity_with_different_bed_label(self):
+        Allocation.objects.create(
+            student=self.student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+        second_student = Student.objects.create(
+            student_id="HMS002",
+            full_name="Second Student",
+            email="second@example.com",
+            status="ACTIVE",
+        )
+        allocation = Allocation(
+            student=second_student,
+            room=self.room,
+            bed_label="Bed 2",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            allocation.full_clean()
+        self.assertIn("This room has no available beds.", str(ctx.exception))
+
+    def test_moving_allocation_into_full_room_is_rejected(self):
+        alloc1 = Allocation.objects.create(
+            student=self.student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+        room_b = Room.objects.create(
+            block="B",
+            room_number="102",
+            capacity=1,
+        )
+        second_student = Student.objects.create(
+            student_id="HMS002",
+            full_name="Second Student",
+            email="second@example.com",
+            status="ACTIVE",
+        )
+        Allocation.objects.create(
+            student=second_student,
+            room=room_b,
+            bed_label="Bed 1",
+        )
+        alloc1.room = room_b
+        alloc1.bed_label = "Bed 2"
+        with self.assertRaises(ValidationError) as ctx:
+            alloc1.full_clean()
+        self.assertIn("This room has no available beds.", str(ctx.exception))
+
+    def test_updating_allocation_within_current_full_room_succeeds(self):
+        alloc = Allocation.objects.create(
+            student=self.student,
+            room=self.room,
+            bed_label="Bed 1",
+        )
+        alloc.bed_label = "Bed 1-Updated"
+        alloc.full_clean()
+        alloc.save()
+        alloc.refresh_from_db()
+        self.assertEqual(alloc.bed_label, "Bed 1-Updated")
+
+    # TC-19: Payment validation hardening
+    def test_payment_amount_zero_or_less_rejected(self):
+        invoice = FeeInvoice.objects.create(
+            student=self.student,
+            description="Semester Fee",
+            amount=Decimal("5000.00"),
+            due_date=date.today() + timedelta(days=15),
+            status="UNPAID",
+        )
+        payment_zero = PaymentRecord(
+            invoice=invoice,
+            amount=Decimal("0.00"),
+            mode="CASH",
+            recorded_by=self.user,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            payment_zero.full_clean()
+        self.assertIn("Payment amount must be greater than zero.", str(ctx.exception))
+
+        payment_neg = PaymentRecord(
+            invoice=invoice,
+            amount=Decimal("-500.00"),
+            mode="CASH",
+            recorded_by=self.user,
+        )
+        with self.assertRaises(ValidationError):
+            payment_neg.full_clean()
+
+    def test_payment_exceeding_remaining_invoice_balance_rejected(self):
+        invoice = FeeInvoice.objects.create(
+            student=self.student,
+            description="Mess Fee",
+            amount=Decimal("5000.00"),
+            due_date=date.today() + timedelta(days=15),
+            status="UNPAID",
+        )
+        PaymentRecord.objects.create(
+            invoice=invoice,
+            amount=Decimal("3000.00"),
+            mode="CASH",
+            recorded_by=self.user,
+        )
+        excess_payment = PaymentRecord(
+            invoice=invoice,
+            amount=Decimal("2500.00"),
+            mode="ONLINE",
+            recorded_by=self.user,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            excess_payment.full_clean()
+        self.assertIn("exceeds outstanding balance", str(ctx.exception))
+
+    def test_payment_exactly_equal_to_remaining_balance_succeeds(self):
+        invoice = FeeInvoice.objects.create(
+            student=self.student,
+            description="Hostel Fee",
+            amount=Decimal("5000.00"),
+            due_date=date.today() + timedelta(days=15),
+            status="UNPAID",
+        )
+        PaymentRecord.objects.create(
+            invoice=invoice,
+            amount=Decimal("3000.00"),
+            mode="CASH",
+            recorded_by=self.user,
+        )
+        exact_payment = PaymentRecord(
+            invoice=invoice,
+            amount=Decimal("2000.00"),
+            mode="CASH",
+            recorded_by=self.user,
+        )
+        exact_payment.full_clean()
+        exact_payment.save()
+
+        # Updating payment excludes itself from sum
+        exact_payment.amount = Decimal("1500.00")
+        exact_payment.full_clean()
+        exact_payment.save()
+        self.assertEqual(exact_payment.amount, Decimal("1500.00"))
+
+    # TC-20: Visitor timestamp validation hardening
+    def test_visitor_exit_time_earlier_than_entry_time_rejected(self):
+        now = timezone.now()
+        visitor = VisitorLog(
+            student=self.student,
+            visitor_name="Jane Doe",
+            entry_time=now,
+            exit_time=now - timedelta(minutes=30),
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            visitor.full_clean()
+        self.assertIn("Exit time cannot be earlier than entry time.", str(ctx.exception))
+
+    def test_visitor_valid_exit_time_and_missing_exit_time_succeed(self):
+        now = timezone.now()
+        ongoing = VisitorLog(
+            student=self.student,
+            visitor_name="Ongoing Visitor",
+            entry_time=now,
+            exit_time=None,
+        )
+        ongoing.full_clean()
+        ongoing.save()
+        self.assertIsNone(ongoing.exit_time)
+
+        completed = VisitorLog(
+            student=self.student,
+            visitor_name="Completed Visitor",
+            entry_time=now - timedelta(hours=2),
+            exit_time=now - timedelta(hours=1),
+        )
+        completed.full_clean()
+        completed.save()
+        self.assertGreater(completed.exit_time, completed.entry_time)
