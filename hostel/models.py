@@ -58,10 +58,14 @@ class Allocation(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        if self.checked_out_at is None and self.student.status != "ACTIVE":
+        if self.checked_out_at is None and getattr(self, "student", None) and self.student.status != "ACTIVE":
             raise ValidationError("Only active students can be allocated a bed.")
-        if self.checked_out_at is None and self.room.available_beds <= 0 and not self.pk:
-            raise ValidationError("This room has no available beds.")
+        if self.checked_out_at is None and getattr(self, "room", None):
+            active_qs = self.room.allocations.filter(checked_out_at__isnull=True)
+            if self.pk:
+                active_qs = active_qs.exclude(pk=self.pk)
+            if active_qs.count() >= self.room.capacity:
+                raise ValidationError("This room has no available beds.")
 
     def __str__(self):
         return f"{self.student} → {self.room} ({self.bed_label})"
@@ -88,6 +92,24 @@ class PaymentRecord(models.Model):
     reference = models.CharField(max_length=100, blank=True)
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     recorded_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.amount is not None and self.amount <= 0:
+            raise ValidationError("Payment amount must be greater than zero.")
+        if getattr(self, "invoice", None) and self.amount is not None:
+            existing_payments = self.invoice.payments.all()
+            if self.pk:
+                existing_payments = existing_payments.exclude(pk=self.pk)
+            total_paid = (
+                existing_payments.aggregate(total=models.Sum("amount"))["total"]
+                or 0
+            )
+            balance_due = self.invoice.amount - total_paid
+            if self.amount > balance_due:
+                raise ValidationError(
+                    f"Payment amount (₹{self.amount}) exceeds outstanding balance (₹{balance_due})."
+                )
 
     def __str__(self):
         return f"Payment ₹{self.amount} for invoice {self.invoice_id}"
@@ -134,6 +156,11 @@ class VisitorLog(models.Model):
     purpose = models.CharField(max_length=200, blank=True)
     entry_time = models.DateTimeField(default=timezone.now)
     exit_time = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.exit_time and self.entry_time and self.exit_time < self.entry_time:
+            raise ValidationError("Exit time cannot be earlier than entry time.")
 
     def __str__(self):
         return f"{self.visitor_name} visiting {self.student}"
