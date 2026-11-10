@@ -1,11 +1,11 @@
-
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -644,3 +644,97 @@ class HostelModelTests(TestCase):
         completed.full_clean()
         completed.save()
         self.assertGreater(completed.exit_time, completed.entry_time)
+
+
+    # TC-21: Inactive student allocation validation
+    def test_allocation_for_inactive_student_is_rejected(self):
+        inactive_student = Student.objects.create(
+            student_id="HMS010",
+            full_name="Inactive Student",
+            email="inactive@example.com",
+            status="INACTIVE",
+        )
+
+        allocation = Allocation(
+            student=inactive_student,
+            room=self.room,
+            bed_label="Bed 2",
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            allocation.full_clean()
+
+        self.assertIn(
+            "Only active students can be allocated a bed.",
+            str(ctx.exception),
+        )
+
+    # TC-22: Allocation without room
+    def test_allocation_without_room_skips_room_capacity_validation(self):
+        allocation = Allocation(
+            student=self.student,
+            bed_label="Bed 2",
+        )
+
+        # Direct clean() isolates the conditional room-capacity logic.
+        allocation.clean()
+
+    # TC-23: Payment without invoice
+    def test_payment_without_invoice_skips_balance_validation(self):
+        payment = PaymentRecord(
+            amount=Decimal("100.00"),
+            mode="CASH",
+            recorded_by=self.user,
+        )
+
+        # Direct clean() isolates the invoice-dependent condition.
+        payment.clean()
+
+    # TC-24: Valid leave dates
+    def test_valid_leave_dates_pass_model_validation(self):
+        leave = LeaveRequest(
+            student=self.student,
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=5),
+            reason="Valid leave request",
+        )
+
+        leave.clean()
+
+    # TC-25: Empty admin bulk deletion
+    def test_admin_bulk_delete_with_empty_queryset(self):
+        request = RequestFactory().post("/admin/hostel/student/")
+        request.user = self.user
+
+        student_admin = admin.site._registry[Student]
+        audit_count_before = AuditEvent.objects.count()
+
+        student_admin.delete_queryset(
+            request,
+            Student.objects.none(),
+        )
+
+        self.assertEqual(
+            AuditEvent.objects.count(),
+            audit_count_before,
+        )
+
+    # TC-26: Prevent recursive audit logging
+    def test_audit_event_does_not_create_another_audit_event(self):
+        from .signals import create_audit_event
+
+        audit = AuditEvent.objects.create(
+            actor=self.user,
+            action="CREATE",
+            object_type="Student",
+            object_id=str(self.student.pk),
+            details={"message": "Test audit event"},
+        )
+
+        audit_count_before = AuditEvent.objects.count()
+        create_audit_event(audit, "UPDATE")
+
+        self.assertEqual(
+            AuditEvent.objects.count(),
+            audit_count_before,
+        )
