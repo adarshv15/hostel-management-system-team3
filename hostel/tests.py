@@ -738,3 +738,9 @@ class HostelModelTests(TestCase):
             AuditEvent.objects.count(),
             audit_count_before,
         )
+    def test_manage_module_import(self):
+        import importlib
+
+        manage_module = importlib.import_module("manage")
+
+        self.assertTrue(callable(manage_module.main))

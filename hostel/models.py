@@ -82,6 +82,26 @@ class FeeInvoice(models.Model):
 
     def __str__(self):
         return f"Invoice #{self.pk} — {self.student} — ₹{self.amount}"
+    def update_status(self):
+        total_paid = (
+            self.payments.aggregate(total=models.Sum("amount"))["total"]
+            or 0
+        )
+
+        balance_due = self.amount - total_paid
+
+        if balance_due <= 0:
+            new_status = "PAID"
+        elif self.due_date < timezone.localdate():
+            new_status = "OVERDUE"
+        elif total_paid > 0:
+            new_status = "PARTIAL"
+        else:
+            new_status = "UNPAID"
+
+        if self.status != new_status:
+            self.status = new_status
+            self.save(update_fields=["status"])
 
 
 class PaymentRecord(models.Model):
@@ -113,6 +133,32 @@ class PaymentRecord(models.Model):
 
     def __str__(self):
         return f"Payment ₹{self.amount} for invoice {self.invoice_id}"
+    def save(self, *args, **kwargs):
+        old_invoice_id = None
+
+        if self.pk:
+            old_invoice_id = (
+                PaymentRecord.objects
+                .filter(pk=self.pk)
+                .values_list("invoice_id", flat=True)
+                .first()
+            )
+
+        super().save(*args, **kwargs)
+
+        self.invoice.update_status()
+
+        if old_invoice_id and old_invoice_id != self.invoice_id:
+            FeeInvoice.objects.get(pk=old_invoice_id).update_status()
+
+    def delete(self, *args, **kwargs):
+        invoice_id = self.invoice_id
+
+        result = super().delete(*args, **kwargs)
+
+        FeeInvoice.objects.get(pk=invoice_id).update_status()
+
+        return result
 
 
 class Complaint(models.Model):
